@@ -27,15 +27,17 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android Licenses
+        run: yes | sdkmanager --licenses || true
+
       - name: Find and Extract ZIP
         run: |
           mkdir -p source
-
           ZIP_FILE=$(find . -type f -iname '*.zip' \
             -not -path './.git/*' | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Tidak ditemukan file ZIP!"
+            echo "ZIP tidak ditemukan!"
             exit 1
           fi
 
@@ -44,14 +46,13 @@ jobs:
 
       - name: Inspect Project
         run: |
-          echo "Isi proyek:"
-          find source -maxdepth 4 -type f | head -150
+          find source -maxdepth 5 -type f | head -150
 
       - name: Check Android Project
         run: |
           if [ ! -f source/gradlew ]; then
-            echo "ZIP belum berisi proyek Android Gradle."
-            echo "Proyek HTML perlu dibuatkan Android WebView wrapper."
+            echo "Proyek Android Gradle belum tersedia."
+            echo "ZIP HTML membutuhkan Android WebView wrapper."
             exit 1
           fi
 
