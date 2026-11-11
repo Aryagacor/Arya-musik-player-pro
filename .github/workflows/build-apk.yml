@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -28,7 +28,6 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: 'true'
-          log-accepted-android-sdk-licenses: 'false'
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Setup Gradle
@@ -36,10 +35,9 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Extract Music Player ZIP
+      - name: Extract ZIP
         run: |
           mkdir -p source
-
           ZIP_FILE=$(find . -maxdepth 3 -type f -iname '*.zip' \
             -not -path './.git/*' | head -n 1)
 
@@ -48,23 +46,36 @@ jobs:
             exit 1
           fi
 
-          echo "File ditemukan: $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d source
 
-      - name: Create Android WebView Project
+      - name: Detect HTML
         run: |
-          INDEX_FILE=$(find source -type f -iname 'index.html' | head -n 1)
+          HTML=$(find source -type f \
+            \( -iname 'index.html' -o -iname 'player.html' \
+            -o -iname 'home.html' -o -iname 'music.html' \) \
+            | head -n 1)
 
-          if [ -z "$INDEX_FILE" ]; then
-            echo "index.html tidak ditemukan dalam ZIP!"
+          if [ -z "$HTML" ]; then
+            HTML=$(find source -type f -iname '*.html' | head -n 1)
+          fi
+
+          if [ -z "$HTML" ]; then
+            echo "Tidak ada file HTML dalam ZIP!"
+            find source -maxdepth 5 -type f
             exit 1
           fi
 
+          echo "HTML_FILE=$HTML" >> "$GITHUB_ENV"
+          echo "Halaman utama: $HTML"
+
+      - name: Create Android Project
+        run: |
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/java/com/arya/musicplayer
           mkdir -p app/src/main/res/values
 
-          cp -a "$(dirname "$INDEX_FILE")"/. app/src/main/assets/
+          cp -a "$(dirname "$HTML_FILE")"/. app/src/main/assets/
+          cp "$HTML_FILE" app/src/main/assets/index.html
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -113,7 +124,6 @@ jobs:
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <resources>
               <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
                   <item name="android:colorAccent">#FF1744</item>
                   <item name="android:statusBarColor">#080713</item>
                   <item name="android:navigationBarColor">#080713</item>
@@ -128,8 +138,7 @@ jobs:
               <application
                   android:theme="@style/AppTheme"
                   android:label="ARYA MUSIC PLAYER PRO"
-                  android:usesCleartextTraffic="true"
-                  android:hardwareAccelerated="true">
+                  android:usesCleartextTraffic="true">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
@@ -150,36 +159,22 @@ jobs:
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.webkit.WebChromeClient;
-          import android.view.Window;
-          import android.view.WindowManager;
 
           public class MainActivity extends Activity {
-              WebView webView;
-
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  webView = new WebView(this);
-                  webView.setWebViewClient(new WebViewClient());
-                  webView.setWebChromeClient(new WebChromeClient());
+                  WebView web = new WebView(this);
+                  web.setWebViewClient(new WebViewClient());
+                  web.setWebChromeClient(new WebChromeClient());
+                  web.getSettings().setJavaScriptEnabled(true);
+                  web.getSettings().setDomStorageEnabled(true);
+                  web.getSettings().setAllowFileAccess(true);
+                  web.getSettings().setMediaPlaybackRequiresUserGesture(false);
 
-                  webView.getSettings().setJavaScriptEnabled(true);
-                  webView.getSettings().setDomStorageEnabled(true);
-                  webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-                  webView.getSettings().setAllowFileAccess(true);
-
-                  setContentView(webView);
-                  webView.loadUrl("file:///android_asset/index.html");
-              }
-
-              @Override
-              public void onBackPressed() {
-                  if (webView.canGoBack()) {
-                      webView.goBack();
-                  } else {
-                      super.onBackPressed();
-                  }
+                  setContentView(web);
+                  web.loadUrl("file:///android_asset/index.html");
               }
           }
           EOF
@@ -194,4 +189,3 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
-          
