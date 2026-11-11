@@ -1,19 +1,21 @@
 
-name: BUILD ARYA MUSIC PLAYER APK
+name: ARYA MUSIC PLAYER PRO - APK BUILD
 
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '*.zip'
-      - '.github/workflows/build-apk.yml'
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -22,18 +24,34 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract ZIP
-        run: |
-          mkdir source
-          unzip -o "Musik pplayer by arya (2).zip" -d source
-          find source -maxdepth 3 -type f | head -100
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Prepare Android project
+      - name: Find and Extract ZIP
         run: |
-          echo "Memeriksa struktur proyek..."
+          mkdir -p source
+
+          ZIP_FILE=$(find . -type f -iname '*.zip' \
+            -not -path './.git/*' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Tidak ditemukan file ZIP!"
+            exit 1
+          fi
+
+          echo "ZIP ditemukan: $ZIP_FILE"
+          unzip -o "$ZIP_FILE" -d source
+
+      - name: Inspect Project
+        run: |
+          echo "Isi proyek:"
+          find source -maxdepth 4 -type f | head -150
+
+      - name: Check Android Project
+        run: |
           if [ ! -f source/gradlew ]; then
             echo "ZIP belum berisi proyek Android Gradle."
-            echo "Perlu dibuatkan wrapper Android WebView terlebih dahulu."
+            echo "Proyek HTML perlu dibuatkan Android WebView wrapper."
             exit 1
           fi
 
@@ -46,6 +64,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARYA-MUSIC-PLAYER-APK
+          name: ARYA-MUSIC-PLAYER-PRO-APK
           path: source/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
           
